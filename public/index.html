@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AltCrew Omni-Search Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Space Grotesk', 'sans-serif'] },
+                    colors: {
+                        zinc: { 950: '#09090b', 900: '#18181b', 800: '#27272a' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-panel {
+            background: rgba(24, 24, 27, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glow-text {
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+        }
+
+        .loader {
+            width: 6px;
+            height: 6px;
+            background: #fff;
+            border-radius: 50%;
+            animation: load 1s infinite alternate;
+        }
+
+        @keyframes load {
+            0% {
+                opacity: 0.2;
+                transform: scale(0.8);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1.2);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-zinc-950 text-white min-h-screen font-sans selection:bg-white/20">
+
+    <!-- Navbar -->
+    <nav class="border-b border-white/5 bg-zinc-950/50 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-2 h-8 bg-gradient-to-b from-white to-zinc-600 rounded-full"></div>
+                <h1 class="text-xl font-bold tracking-tight">AltCrew <span
+                        class="text-zinc-500 font-normal">Omni-Search</span></h1>
+            </div>
+            <div class="flex gap-4 text-xs font-mono text-zinc-500">
+                <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> ENGINE
+                    ONLINE</span>
+                <span class="hidden sm:inline">GEMINI 1.5 PRO CONNECTED</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-5xl mx-auto px-6 py-20 flex flex-col items-center">
+
+        <!-- Search Hero -->
+        <div class="text-center mb-16 relative w-full max-w-2xl">
+            <h2 class="text-5xl sm:text-6xl font-bold mb-6 glow-text tracking-tight">Find Everything.</h2>
+            <p class="text-zinc-400 text-lg mb-10">Searching across 6 parallel layers: <br /><span
+                    class="text-zinc-600 text-sm font-mono mt-2 block">Standard • Community • Abstract • Sports • Event
+                    • Hybrid</span></p>
+
+            <form id="searchForm" class="relative group">
+                <input type="text" id="query" placeholder="e.g. 'Run Clubs in Bangalore' or 'Hyfit'"
+                    class="w-full bg-zinc-900/80 border border-white/10 rounded-2xl px-8 py-5 text-xl outline-none focus:border-white/30 focus:ring-1 focus:ring-white/20 transition-all shadow-2xl shadow-black/50 placeholder:text-zinc-700"
+                    autocomplete="off">
+                <button type="submit"
+                    class="absolute right-3 top-3 bottom-3 px-6 bg-white text-black font-semibold rounded-xl hover:bg-zinc-200 transition-colors flex items-center gap-2">
+                    <span>Search</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </button>
+            </form>
+
+            <!-- Loading State -->
+            <div id="loading" class="hidden mt-12">
+                <div class="flex gap-2 justify-center mb-4">
+                    <div class="loader" style="animation-delay: 0s"></div>
+                    <div class="loader" style="animation-delay: 0.2s"></div>
+                    <div class="loader" style="animation-delay: 0.4s"></div>
+                </div>
+                <p id="loadingText" class="text-zinc-500 text-sm font-mono animate-pulse">Initializing 6-Layer Search...
+                </p>
+            </div>
+        </div>
+
+        <!-- Results Table -->
+        <div id="resultsArea" class="w-full hidden opacity-0 transition-opacity duration-700">
+            <div class="flex justify-between items-end mb-6 border-b border-white/5 pb-4">
+                <div>
+                    <h3 class="text-2xl font-semibold">Discovered Entities</h3>
+                    <p class="text-zinc-500 text-sm mt-1" id="metaInfo">-- results found in --s</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="toggleSelectAll()" id="selectAllBtn"
+                        class="text-sm px-4 py-2 border border-white/10 rounded hover:bg-white/5 transition text-zinc-400">Select
+                        All</button>
+                    <button onclick="downloadCSV()" id="exportBtn"
+                        class="text-sm px-4 py-2 bg-white text-black font-semibold rounded hover:bg-zinc-200 transition">Export
+                        CSV</button>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-white/5 overflow-hidden bg-zinc-900/30">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-white/5 text-zinc-400 text-xs uppercase tracking-wider font-semibold">
+                        <tr>
+                            <th class="px-6 py-4 w-10">
+                                <input type="checkbox" id="headerCheckbox" onclick="toggleSelectAll()"
+                                    class="rounded border-zinc-700 bg-zinc-800 text-white focus:ring-0">
+                            </th>
+                            <th class="px-6 py-4 w-20">Identity</th>
+                            <th class="px-6 py-4">Name & Handle</th>
+                            <th class="px-6 py-4">Category</th>
+                            <th class="px-6 py-4">Followers</th>
+                            <th class="px-6 py-4 w-1/3">AI Reasoning</th>
+                            <th class="px-6 py-4">Link</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsTableBody" class="divide-y divide-white/5 text-sm">
+                        <!-- Rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination Controls -->
+            <div id="paginationControls"
+                class="hidden flex justify-between items-center mt-6 pt-4 border-t border-white/5 text-zinc-400 text-sm">
+                <span id="pageInfo">Page 1 of 1</span>
+                <div class="flex gap-2">
+                    <button onclick="changePage(-1)" id="prevBtn"
+                        class="px-4 py-2 border border-white/10 rounded hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+                    <button onclick="changePage(1)" id="nextBtn"
+                        class="px-4 py-2 border border-white/10 rounded hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+                </div>
+            </div>
+
+            <div id="noResults" class="hidden text-center py-20 text-zinc-600">
+                <p>No valid entities found for this query.</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = '/api/omni-search'; // Relative path since on same server
+        let currentResults = [];
+        let selectedIndices = new Set();
+        let currentPage = 1;
+        const ITEMS_PER_PAGE = 20;
+
+        const categoryColors = {
+            "Club": "bg-blue-500/10 text-blue-400 border-blue-500/20",
+            "Sports Facility": "bg-green-500/10 text-green-400 border-green-500/20",
+            "Event": "bg-orange-500/10 text-orange-400 border-orange-500/20",
+            "Hybrid Studio": "bg-purple-500/10 text-purple-400 border-purple-500/20",
+            "Community": "bg-pink-500/10 text-pink-400 border-pink-500/20"
+        };
+
+        const loadingMessages = [
+            "Scanning Layer 1: Standard Search...",
+            "Scanning Layer 2: Community & Tribes...",
+            "Scanning Layer 3: Abstract 'Vibe' Search...",
+            "Scanning Layer 4: Sports Facilities...",
+            "Scanning Layer 5: Events & Expos...",
+            "Scanning Layer 6: Hybrid Studios...",
+            "Aggregating & Deduplicating Candidates...",
+            "Gemini 1.5 Pro: Classifying & Extracting Metadata...",
+            "Finalizing Professional Dashboard..."
+        ];
+
+        document.getElementById('searchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = document.getElementById('query').value;
+            if (!query) return;
+
+            // UI Reset
+            const resultsArea = document.getElementById('resultsArea');
+            const tableBody = document.getElementById('resultsTableBody');
+            const loading = document.getElementById('loading');
+            const loadingText = document.getElementById('loadingText');
+
+            resultsArea.classList.add('hidden', 'opacity-0');
+            resultsArea.classList.remove('opacity-100');
+            loading.classList.remove('hidden');
+            tableBody.innerHTML = '';
+
+            // Cycling Messages
+            let msgIdx = 0;
+            loadingText.innerText = loadingMessages[0];
+            const interval = setInterval(() => {
+                msgIdx = (msgIdx + 1) % loadingMessages.length;
+                loadingText.innerText = loadingMessages[msgIdx];
+            }, 800);
+
+            try {
+                const start = Date.now();
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                const data = await res.json();
+
+                clearInterval(interval);
+                loading.classList.add('hidden');
+                resultsArea.classList.remove('hidden');
+                // Trigger reflow
+                void resultsArea.offsetWidth;
+                resultsArea.classList.add('opacity-100');
+
+                currentResults = data.results || [];
+
+                if (currentResults.length === 0) {
+                    document.getElementById('noResults').classList.remove('hidden');
+                    document.getElementById('paginationControls').classList.add('hidden');
+                    return;
+                } else {
+                    document.getElementById('noResults').classList.add('hidden');
+                }
+
+                // Update Meta
+                document.getElementById('metaInfo').innerText =
+                    `${currentResults.length} entities found via ${data.meta.layers_used} search layers in ${((Date.now() - start) / 1000).toFixed(1)}s`;
+
+                // Render Table (Page 1)
+                currentPage = 1;
+                renderTable();
+
+            } catch (err) {
+                console.error(err);
+                clearInterval(interval);
+                loading.classList.add('hidden');
+                alert("Omni-Search Failed. Check console.");
+            }
+        });
+
+        // Render Table Function
+        function renderTable() {
+            const tableBody = document.getElementById('resultsTableBody');
+            tableBody.innerHTML = '';
+
+            const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
+            const endIdx = startIdx + ITEMS_PER_PAGE;
+            const pageItems = currentResults.slice(startIdx, endIdx);
+
+            pageItems.forEach((item, relativeIndex) => {
+                const globalIndex = startIdx + relativeIndex;
+                const row = document.createElement('tr');
+                row.className = "hover:bg-white/5 transition-colors group cursor-pointer";
+                row.onclick = (e) => {
+                    if (e.target.tagName !== 'A' && e.target.tagName !== 'INPUT') toggleSelection(globalIndex);
+                };
+
+                // Logo Fallback
+                const logoHtml = item.logo
+                    ? `<img src="${item.logo}" class="w-10 h-10 rounded-full object-cover border border-white/10" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNTI1MjViIiBzdHJva2Utd2lkdGg9IjIiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PC9zdmc+'">`
+                    : `<div class="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-500">${item.name.charAt(0)}</div>`;
+
+                const badgeClass = categoryColors[item.category] || "bg-zinc-800 text-zinc-400 border-zinc-700";
+
+                row.innerHTML = `
+                    <td class="px-6 py-4">
+                        <input type="checkbox" class="row-checkbox rounded border-zinc-700 bg-zinc-800 text-white focus:ring-0" 
+                            data-index="${globalIndex}" onclick="event.stopPropagation(); toggleSelection(${globalIndex})">
+                    </td>
+                    <td class="px-6 py-4">${logoHtml}</td>
+                    <td class="px-6 py-4">
+                        <div class="font-bold text-white text-base">${item.name}</div>
+                        <div class="text-zinc-500 text-xs font-mono">${item.handle}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-medium border ${badgeClass}">
+                            ${item.category}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 font-mono text-zinc-300">
+                        ${item.followers || '<span class="text-zinc-700">--</span>'}
+                    </td>
+                    <td class="px-6 py-4 text-zinc-500 italic text-xs leading-relaxed">
+                        "${item.reasoning}"
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <a href="${item.url}" target="_blank" class="p-2 bg-white/5 rounded-lg hover:bg-white hover:text-black transition-colors inline-block group-hover:scale-110 transform duration-200">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                        </a>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            // Update Pagination UI
+            const totalPages = Math.ceil(currentResults.length / ITEMS_PER_PAGE);
+            document.getElementById('paginationControls').classList.remove('hidden');
+            document.getElementById('pageInfo').innerText = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('prevBtn').disabled = currentPage === 1;
+            document.getElementById('nextBtn').disabled = currentPage === totalPages;
+
+            // Checkboxes
+            updateSelectionUI();
+        }
+
+        function changePage(direction) {
+            const totalPages = Math.ceil(currentResults.length / ITEMS_PER_PAGE);
+            const newPage = currentPage + direction;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                renderTable();
+            }
+        }
+
+        // Toggle Single Selection
+        function toggleSelection(index) {
+            if (selectedIndices.has(index)) {
+                selectedIndices.delete(index);
+            } else {
+                selectedIndices.add(index);
+            }
+            updateSelectionUI();
+        }
+
+        // Toggle Select All
+        function toggleSelectAll() {
+            const allSelected = selectedIndices.size === currentResults.length && currentResults.length > 0;
+            if (allSelected) {
+                selectedIndices.clear();
+            } else {
+                currentResults.forEach((_, i) => selectedIndices.add(i));
+            }
+            updateSelectionUI();
+        }
+
+        // Update UI state based on selection
+        function updateSelectionUI() {
+            // Update Checkboxes
+            document.querySelectorAll('.row-checkbox').forEach(cb => {
+                const idx = parseInt(cb.dataset.index);
+                cb.checked = selectedIndices.has(idx);
+                // Highlight row
+                const tr = cb.closest('tr');
+                if (selectedIndices.has(idx)) {
+                    tr.classList.add('bg-white/10');
+                } else {
+                    tr.classList.remove('bg-white/10');
+                }
+            });
+
+            // Update Header Checkbox
+            const headerCb = document.getElementById('headerCheckbox');
+            if (headerCb) {
+                headerCb.checked = selectedIndices.size === currentResults.length && currentResults.length > 0;
+                headerCb.indeterminate = selectedIndices.size > 0 && selectedIndices.size < currentResults.length;
+            }
+
+            // Update Buttons
+            const exportBtn = document.getElementById('exportBtn');
+            const selectAllBtn = document.getElementById('selectAllBtn');
+
+            if (selectedIndices.size > 0) {
+                exportBtn.innerText = `Export Selected (${selectedIndices.size})`;
+                selectAllBtn.innerText = selectedIndices.size === currentResults.length ? "Deselect All" : "Select All";
+            } else {
+                exportBtn.innerText = "Export All";
+                selectAllBtn.innerText = "Select All";
+            }
+        }
+
+        function downloadCSV() {
+            if (!currentResults.length) return;
+
+            // Filter if selection exists, otherwise export select all
+            const itemsToExport = selectedIndices.size > 0
+                ? currentResults.filter((_, i) => selectedIndices.has(i))
+                : currentResults;
+
+            const headers = ["Name", "Handle", "Category", "Followers", "Reasoning", "URL"];
+            const csvRows = [headers.join(',')];
+
+            itemsToExport.forEach(row => {
+                const values = [
+                    `"${row.name}"`,
+                    row.handle,
+                    row.category,
+                    row.followers,
+                    `"${row.reasoning}"`,
+                    row.url
+                ];
+                csvRows.push(values.join(','));
+            });
+
+            const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `omni_search_results_${selectedIndices.size || 'all'}.csv`;
+            a.click();
+        }
+    </script>
+</body>
+
+</html>
