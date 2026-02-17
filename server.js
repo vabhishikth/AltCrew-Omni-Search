@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // Configuration
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const PAGINATION_PAGES = 4; // Fetch top 40 results per layer (4 pages)
 const customSearch = google.customsearch('v1');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
