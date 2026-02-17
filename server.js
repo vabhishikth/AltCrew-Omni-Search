@@ -68,33 +68,48 @@ async function expandQuery(userQuery) {
     console.log(`\n🧠 PHASE 1: Expanding query with AI...`);
 
     const prompt = `
-You are a search query expansion engine for discovering fitness, sports, wellness, and active lifestyle communities on Instagram.
+You are a search query expansion engine for discovering fitness, sports, wellness, and active lifestyle Instagram accounts.
 
 USER QUERY: "${userQuery}"
 
 YOUR TASK:
-1. Extract the CITY/LOCATION from the query (if not specified, use "India").
-2. Understand the user's INTENT — what types of communities/clubs/events they want.
-3. Generate 10-15 DIVERSE search queries that will find ALL related Instagram profiles.
+1. Extract the CITY/LOCATION from the query.
+2. Identify the MAJOR NEIGHBORHOODS/AREAS in that city (e.g., for Bangalore: Indiranagar, HSR Layout, Koramangala, Whitefield, JP Nagar, Jayanagar, Marathahalli, etc.).
+3. Generate 20-30 DIVERSE search queries combining BOTH categories AND neighborhoods.
 
-IMPORTANT RULES:
-- Each query should target a DIFFERENT category/niche (running, yoga, cycling, CrossFit, pickleball, martial arts, dance fitness, swimming, hiking, wellness, meditation, calisthenics, etc.)
-- Include queries for EVENTS (marathons, tournaments, expos, workshops)
-- Include queries for abstract/vibe community names (crews, collectives, squads, scenes, tribes)
-- Keep each query SHORT (2-5 words + city name)
-- Do NOT repeat the same concept in different phrasings
+QUERY GENERATION STRATEGY:
+
+A) CATEGORY QUERIES (8-10 queries covering different fitness niches):
+   - Running: "run club CityName", "running group CityName", "runners CityName"
+   - Yoga/Wellness: "yoga studio CityName", "wellness community CityName"
+   - CrossFit/Gym: "crossfit CityName", "fitness club CityName"
+   - Sports: "pickleball CityName", "badminton club CityName", "cycling group CityName"
+   - Events: "marathon CityName", "fitness event CityName"
+   - Abstract names: "fitness crew CityName", "workout tribe CityName"
+
+B) NEIGHBORHOOD QUERIES (8-12 queries targeting specific areas):
+   - "run club Neighborhood", "fitness Neighborhood CityName"
+   - Target the TOP 6-8 neighborhoods/areas in the city
+   - These catch hyper-local clubs like "Indiranagar Run Club" or "HSR Runners"
+
+C) DISCOVERY QUERIES (4-6 queries to find hidden gems):
+   - "best fitness communities CityName"
+   - "sports clubs near CityName"
+   - "active lifestyle CityName Instagram"
+   - "fitness influencer CityName" (to find coaches/trainers who lead communities)
+
+RULES:
+- Generate 20-30 total queries (this is critical for coverage)
+- Each query should be SHORT (2-6 words)
+- No duplicates or near-duplicates
+- Cover as many different areas and niches as possible
 
 RESPOND WITH ONLY A JSON OBJECT:
 {
   "location": "City Name",
+  "neighborhoods": ["Area1", "Area2", ...],
   "intent": "brief description of user intent",
-  "queries": [
-    "run club CityName",
-    "yoga community CityName",
-    "CrossFit box CityName",
-    "cycling group CityName",
-    ...
-  ]
+  "queries": ["query1", "query2", ...]
 }
 `;
 
@@ -104,19 +119,21 @@ RESPOND WITH ONLY A JSON OBJECT:
         const parsed = JSON.parse(clean);
         console.log(`   ✅ AI generated ${parsed.queries.length} search queries`);
         console.log(`   📍 Location: ${parsed.location}`);
+        console.log(`   🏘️  Neighborhoods: ${(parsed.neighborhoods || []).join(', ')}`);
         console.log(`   🎯 Intent: ${parsed.intent}`);
         parsed.queries.forEach((q, i) => console.log(`      ${i + 1}. ${q}`));
         return parsed;
     } catch (err) {
         console.error(`   ❌ Query expansion failed: ${err.message}`);
-        // Fallback: use the raw query with default expansions
         const fallbackQueries = [
             userQuery,
             `${userQuery} club`,
             `${userQuery} community`,
             `${userQuery} fitness`,
             `${userQuery} event`,
-            `${userQuery} academy`,
+            `${userQuery} running`,
+            `${userQuery} yoga`,
+            `${userQuery} sports`,
         ];
         return {
             location: 'Unknown',
@@ -129,31 +146,29 @@ RESPOND WITH ONLY A JSON OBJECT:
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🔍 PHASE 2: MULTI-QUERY SEARCH
-// Searches each AI-generated query on Instagram via Google Custom Search
+// Two strategies: Instagram-specific + Web-wide discovery
 // ═══════════════════════════════════════════════════════════════════════════
-const PAGES_PER_QUERY = 2; // 20 results per query
 
-async function searchInstagram(query, queryLabel) {
-    const searchQuery = `site:instagram.com ${query}`;
-    const offsets = Array.from({ length: PAGES_PER_QUERY }, (_, i) => 1 + (i * 10));
+// Generic search function — searches Google Custom Search with given query
+async function googleSearch(fullQuery, label, pages = 2) {
+    const offsets = Array.from({ length: pages }, (_, i) => 1 + (i * 10));
 
     const pagePromises = offsets.map(async (start) => {
         try {
             const res = await customSearch.cse.list({
                 auth: process.env.GOOGLE_SEARCH_API_KEY,
                 cx: process.env.GOOGLE_SEARCH_CX,
-                q: searchQuery,
+                q: fullQuery,
                 num: 10,
                 start: start
             });
             return (res.data.items || []).map(item => ({
                 ...item,
-                searchQuery: queryLabel
+                searchQuery: label
             }));
         } catch (e) {
-            // Don't log quota errors for every page — too noisy
             if (!e.message.includes('429') && !e.message.includes('rateLimitExceeded')) {
-                console.error(`      ⚠️ [${queryLabel}] page ${start}: ${e.message}`);
+                console.error(`      ⚠️ [${label}] page ${start}: ${e.message}`);
             }
             return [];
         }
@@ -161,6 +176,16 @@ async function searchInstagram(query, queryLabel) {
 
     const results = await Promise.all(pagePromises);
     return results.flat();
+}
+
+// Strategy A: Search Instagram directly
+function searchInstagram(query, label) {
+    return googleSearch(`site:instagram.com ${query}`, `IG: ${label}`, 2);
+}
+
+// Strategy B: Search the open web (finds clubs on blogs, directories, listings)
+function searchWeb(query, label) {
+    return googleSearch(`${query} instagram`, `WEB: ${label}`, 1);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -255,16 +280,35 @@ app.post('/api/omni-search', async (req, res) => {
             expansion = { location: 'Unknown', intent: query, queries: [query], fallback: true };
         }
 
-        // ─── PHASE 2: Multi-Query Search ───
-        console.log(`\n🔍 PHASE 2: Searching ${expansion.queries.length} queries across Instagram...`);
+        // ─── PHASE 2: Multi-Query Search (Instagram + Web) ───
+        const totalQueries = expansion.queries.length;
+        console.log(`\n🔍 PHASE 2: Searching ${totalQueries} queries (Instagram + Web)...`);
 
-        const searchPromises = expansion.queries.map((q, i) => {
-            const label = `Q${i + 1}: ${q}`;
-            console.log(`   📡 ${label}`);
-            return searchInstagram(q, label).catch(e => {
-                errors.push(`Search [${label}]: ${e.message}`);
-                return [];
-            });
+        const searchPromises = [];
+
+        // Strategy A: Search Instagram for ALL queries
+        expansion.queries.forEach((q, i) => {
+            const label = `${q}`;
+            console.log(`   📡 IG: ${label}`);
+            searchPromises.push(
+                searchInstagram(q, label).catch(e => {
+                    errors.push(`IG Search [${label}]: ${e.message}`);
+                    return [];
+                })
+            );
+        });
+
+        // Strategy B: Web-wide search for top 5 category queries (to find clubs listed elsewhere)
+        const webQueries = expansion.queries.slice(0, 5);
+        webQueries.forEach((q, i) => {
+            const label = `${q}`;
+            console.log(`   🌐 WEB: ${label}`);
+            searchPromises.push(
+                searchWeb(q, label).catch(e => {
+                    errors.push(`Web Search [${label}]: ${e.message}`);
+                    return [];
+                })
+            );
         });
 
         const searchResults = await Promise.all(searchPromises);
