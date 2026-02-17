@@ -62,47 +62,55 @@ async function callGemini(prompt) {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🧠 PHASE 1: AI QUERY EXPANSION
-// Takes a natural language query and generates diverse search terms
+// Generates comprehensive search queries across categories, neighborhoods,
+// popular accounts, hashtags, and discovery patterns
 // ═══════════════════════════════════════════════════════════════════════════
 async function expandQuery(userQuery) {
     console.log(`\n🧠 PHASE 1: Expanding query with AI...`);
 
     const prompt = `
-You are a search query expansion engine for discovering fitness, sports, wellness, and active lifestyle Instagram accounts.
+You are an expert search query generator. Your job is to generate the MOST COMPREHENSIVE set of Google search queries possible to discover ALL fitness, wellness, sports, and active lifestyle communities/clubs/events in a city.
 
 USER QUERY: "${userQuery}"
 
-YOUR TASK:
-1. Extract the CITY/LOCATION from the query.
-2. Identify the MAJOR NEIGHBORHOODS/AREAS in that city (e.g., for Bangalore: Indiranagar, HSR Layout, Koramangala, Whitefield, JP Nagar, Jayanagar, Marathahalli, etc.).
-3. Generate 20-30 DIVERSE search queries combining BOTH categories AND neighborhoods.
+CRITICAL: Even if the user mentions only ONE category (e.g., "run clubs"), you MUST STILL generate queries for ALL fitness/wellness/sports categories. The user wants to discover the ENTIRE fitness ecosystem in that city. "Run clubs in Bangalore" means "show me run clubs, cycling groups, yoga studios, CrossFit boxes, pickleball crews, dance fitness, martial arts, wellness communities, fitness brands, coaches, AND everything else in Bangalore." Always treat ANY fitness-related query as a request for the FULL spectrum of active lifestyle communities.
 
-QUERY GENERATION STRATEGY:
+GENERATE QUERIES IN THESE CATEGORIES:
 
-A) CATEGORY QUERIES (8-10 queries covering different fitness niches):
-   - Running: "run club CityName", "running group CityName", "runners CityName"
-   - Yoga/Wellness: "yoga studio CityName", "wellness community CityName"
-   - CrossFit/Gym: "crossfit CityName", "fitness club CityName"
-   - Sports: "pickleball CityName", "badminton club CityName", "cycling group CityName"
-   - Events: "marathon CityName", "fitness event CityName"
-   - Abstract names: "fitness crew CityName", "workout tribe CityName"
+A) DIRECT CATEGORY SEARCHES (10-12 queries):
+   Cover EVERY fitness niche — running, cycling, yoga, CrossFit, calisthenics, swimming, hiking, trekking, martial arts, boxing, dance fitness, Zumba, pickleball, badminton, tennis, football, basketball, ultimate frisbee, bouldering, climbing, skateboarding, surfing, etc.
+   Format: "category CityName" or "category club CityName"
 
-B) NEIGHBORHOOD QUERIES (8-12 queries targeting specific areas):
-   - "run club Neighborhood", "fitness Neighborhood CityName"
-   - Target the TOP 6-8 neighborhoods/areas in the city
-   - These catch hyper-local clubs like "Indiranagar Run Club" or "HSR Runners"
+B) NEIGHBORHOOD/AREA SPECIFIC (8-10 queries):
+   Generate queries for the most popular neighborhoods in the city.
+   Format: "run club NeighborhoodName" or "fitness NeighborhoodName CityName"
 
-C) DISCOVERY QUERIES (4-6 queries to find hidden gems):
-   - "best fitness communities CityName"
-   - "sports clubs near CityName"
-   - "active lifestyle CityName Instagram"
-   - "fitness influencer CityName" (to find coaches/trainers who lead communities)
+C) LISTICLE & DIRECTORY DISCOVERY (6-8 queries):
+   These find blog posts and articles that LIST many clubs at once:
+   - "best fitness clubs in CityName"
+   - "top run clubs CityName 2024"
+   - "fitness communities in CityName list"
+   - "workout groups CityName reddit"
+   - "CityName fitness Instagram accounts to follow"
+   - "sports clubs in CityName directory"
+
+D) HASHTAG & SOCIAL DISCOVERY (4-6 queries):
+   - "#CityNamefitness Instagram"
+   - "#CityNamerunners"
+   - "CityName fitness influencer"
+   - "CityName wellness coach"
+
+E) POPULAR & WELL-KNOWN ACCOUNTS (4-6 queries):
+   - "most popular fitness pages CityName Instagram"
+   - "famous run clubs CityName"
+   - "trending fitness CityName"
 
 RULES:
-- Generate 20-30 total queries (this is critical for coverage)
+- Generate 30-40 total queries (MORE IS BETTER for coverage)
 - Each query should be SHORT (2-6 words)
-- No duplicates or near-duplicates
-- Cover as many different areas and niches as possible
+- Cover as many different sports and activities as possible
+- Mix specific (e.g., "CrossFit Indiranagar") with broad (e.g., "fitness community Bangalore")
+- Include both English and any locally relevant language terms
 
 RESPOND WITH ONLY A JSON OBJECT:
 {
@@ -134,6 +142,8 @@ RESPOND WITH ONLY A JSON OBJECT:
             `${userQuery} running`,
             `${userQuery} yoga`,
             `${userQuery} sports`,
+            `best fitness clubs ${userQuery}`,
+            `top run clubs ${userQuery}`,
         ];
         return {
             location: 'Unknown',
@@ -146,10 +156,9 @@ RESPOND WITH ONLY A JSON OBJECT:
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🔍 PHASE 2: MULTI-QUERY SEARCH
-// Two strategies: Instagram-specific + Web-wide discovery
+// Three strategies: Instagram direct, Web discovery, Listicle mining
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Generic search function — searches Google Custom Search with given query
 async function googleSearch(fullQuery, label, pages = 2) {
     const offsets = Array.from({ length: pages }, (_, i) => 1 + (i * 10));
 
@@ -178,28 +187,30 @@ async function googleSearch(fullQuery, label, pages = 2) {
     return results.flat();
 }
 
-// Strategy A: Search Instagram directly
+// Strategy A: Search Instagram directly (3 pages = 30 results per query)
 function searchInstagram(query, label) {
-    return googleSearch(`site:instagram.com ${query}`, `IG: ${label}`, 2);
+    return googleSearch(`site:instagram.com ${query}`, `IG: ${label}`, 3);
 }
 
-// Strategy B: Search the open web (finds clubs on blogs, directories, listings)
+// Strategy B: Search the open web (2 pages = 20 results — finds blogs, directories, listings)
 function searchWeb(query, label) {
-    return googleSearch(`${query} instagram`, `WEB: ${label}`, 1);
+    return googleSearch(`${query} instagram`, `WEB: ${label}`, 2);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🎯 PHASE 3: AI CLASSIFICATION
-// Uses Gemini to classify and filter results intelligently
+// Two-stage: classify Instagram profiles + extract handles from web pages
 // ═══════════════════════════════════════════════════════════════════════════
-async function classifyResults(candidates, userQuery, location) {
+
+// Stage A: Classify direct Instagram results
+async function classifyInstagramResults(candidates, userQuery, location) {
     const BATCH_SIZE = 40;
     const batches = [];
     for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
         batches.push(candidates.slice(i, i + BATCH_SIZE));
     }
 
-    console.log(`\n🎯 PHASE 3: AI Classification (${candidates.length} candidates in ${batches.length} batches)...`);
+    console.log(`   📋 Classifying ${candidates.length} Instagram candidates (${batches.length} batches)...`);
 
     const batchPromises = batches.map(async (batch, index) => {
         const prompt = `
@@ -209,18 +220,18 @@ USER QUERY: "${userQuery}"
 TARGET LOCATION: "${location}"
 
 INSTRUCTIONS:
-1. Analyze each Instagram profile result below.
-2. Determine if it is a REAL fitness/wellness/sports entity (club, community, studio, event, brand, coach).
-3. CLASSIFY into one of: "Run Club", "Fitness Club", "Sports Club", "Yoga/Wellness", "Event", "Hybrid Studio", "Community", "Coach/Trainer", "Brand".
+1. Analyze each result below.
+2. Determine if it is a REAL fitness/wellness/sports entity.
+3. CLASSIFY into: "Run Club", "Fitness Club", "Sports Club", "Yoga/Wellness", "Event", "Hybrid Studio", "Community", "Coach/Trainer", "Brand".
 4. EXTRACT the follower count from 'ogDescription' (e.g., "12.5K Followers" → "12.5k").
-5. Write a SHORT reasoning (3-5 words) for why it matched.
+5. Write a SHORT reasoning (3-5 words).
 
 CRITICAL RULES:
-- DO NOT judge by name alone! A club called "Daa Scene" or "Hyfit" or "The Tribe" IS valid if their bio/description mentions fitness, running, wellness, yoga, sports, or similar activities.
-- Look at the BIO/DESCRIPTION content to determine relevance, not just the name.
-- REJECT only if the profile is clearly a personal account with no fitness/community activity.
-- REJECT profiles that are clearly in a different city/country (unless the city isn't specified).
-- BE INCLUSIVE — when in doubt, INCLUDE the result.
+- DO NOT judge by name alone! Abstract names like "Daa Scene", "Hyfit", "The Tribe", "Soul Mates" ARE valid if their description hints at fitness/wellness/sports.
+- Look at the BIO/DESCRIPTION/SNIPPET to determine relevance.
+- REJECT only if clearly a personal account with no fitness/community activity.
+- REJECT profiles clearly in a different city (unless city is unspecified).
+- BE VERY INCLUSIVE — when in doubt, INCLUDE the result. It's better to include an extra result than to miss a real club.
 
 INPUT DATA:
 ${JSON.stringify(batch, null, 2)}
@@ -247,7 +258,70 @@ If NO results are valid, respond with: []
             const clean = raw.replace(/```json|```/g, '').trim();
             return JSON.parse(clean);
         } catch (err) {
-            console.error(`      ❌ Classification batch ${index + 1} failed: ${err.message}`);
+            console.error(`      ❌ IG Classification batch ${index + 1} failed: ${err.message}`);
+            return [];
+        }
+    });
+
+    const batchResults = await Promise.all(batchPromises);
+    return batchResults.flat();
+}
+
+// Stage B: Extract Instagram handles from web pages (blogs, directories, articles)
+async function extractFromWebResults(candidates, userQuery, location) {
+    if (candidates.length === 0) return [];
+
+    const BATCH_SIZE = 30;
+    const batches = [];
+    for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+        batches.push(candidates.slice(i, i + BATCH_SIZE));
+    }
+
+    console.log(`   🌐 Mining ${candidates.length} web results for Instagram handles (${batches.length} batches)...`);
+
+    const batchPromises = batches.map(async (batch, index) => {
+        const prompt = `
+You are an Instagram handle extractor. Your job is to find ALL fitness/wellness/sports Instagram accounts mentioned in web pages.
+
+USER QUERY: "${userQuery}"
+TARGET LOCATION: "${location}"
+
+These are web search results (blog posts, directories, articles, listings). They often contain lists of fitness clubs, communities, and events with their Instagram handles.
+
+INSTRUCTIONS:
+1. Read each result's title, snippet, and description.
+2. Extract EVERY Instagram handle or account name mentioned that relates to fitness/wellness/sports in ${location}.
+3. If a snippet mentions "follow @someclub on Instagram" or lists accounts, extract ALL of them.
+4. If the result is an article like "10 Best Run Clubs in ${location}", try to identify all clubs mentioned.
+5. Even if you can't find the exact handle, provide the club NAME if clearly mentioned.
+
+INPUT DATA:
+${JSON.stringify(batch, null, 2)}
+
+RESPOND WITH ONLY A JSON ARRAY of accounts found:
+[
+  {
+    "name": "Club Name",
+    "handle": "@handle_if_found_or_null",
+    "category": "Run Club",
+    "subcategory": "Running",
+    "followers": null,
+    "logo": null,
+    "reasoning": "Mentioned in listicle article",
+    "url": "https://instagram.com/handle_if_known",
+    "source": "extracted from web"
+  }
+]
+
+If no accounts found, respond with: []
+`;
+
+        try {
+            const raw = await callGemini(prompt);
+            const clean = raw.replace(/```json|```/g, '').trim();
+            return JSON.parse(clean);
+        } catch (err) {
+            console.error(`      ❌ Web extraction batch ${index + 1} failed: ${err.message}`);
             return [];
         }
     });
@@ -282,50 +356,52 @@ app.post('/api/omni-search', async (req, res) => {
 
         // ─── PHASE 2: Multi-Query Search (Instagram + Web) ───
         const totalQueries = expansion.queries.length;
-        console.log(`\n🔍 PHASE 2: Searching ${totalQueries} queries (Instagram + Web)...`);
+        console.log(`\n🔍 PHASE 2: Searching ${totalQueries} queries (IG + Web)...`);
 
-        const searchPromises = [];
+        const igPromises = [];
+        const webPromises = [];
 
-        // Strategy A: Search Instagram for ALL queries
-        expansion.queries.forEach((q, i) => {
-            const label = `${q}`;
-            console.log(`   📡 IG: ${label}`);
-            searchPromises.push(
-                searchInstagram(q, label).catch(e => {
-                    errors.push(`IG Search [${label}]: ${e.message}`);
+        // ALL queries search Instagram (3 pages each)
+        expansion.queries.forEach((q) => {
+            console.log(`   📡 IG: ${q}`);
+            igPromises.push(
+                searchInstagram(q, q).catch(e => {
+                    errors.push(`IG [${q}]: ${e.message}`);
                     return [];
                 })
             );
         });
 
-        // Strategy B: Web-wide search for top 5 category queries (to find clubs listed elsewhere)
-        const webQueries = expansion.queries.slice(0, 5);
-        webQueries.forEach((q, i) => {
-            const label = `${q}`;
-            console.log(`   🌐 WEB: ${label}`);
-            searchPromises.push(
-                searchWeb(q, label).catch(e => {
-                    errors.push(`Web Search [${label}]: ${e.message}`);
+        // ALL queries ALSO search the web (2 pages each)
+        expansion.queries.forEach((q) => {
+            console.log(`   🌐 WEB: ${q}`);
+            webPromises.push(
+                searchWeb(q, q).catch(e => {
+                    errors.push(`WEB [${q}]: ${e.message}`);
                     return [];
                 })
             );
         });
 
-        const searchResults = await Promise.all(searchPromises);
+        // Execute all searches in parallel
+        const [igResults, webResults] = await Promise.all([
+            Promise.all(igPromises),
+            Promise.all(webPromises)
+        ]);
 
-        // Flatten and Deduplicate
-        const allItems = searchResults.flat();
+        // Separate Instagram vs Web results for different classification
+        const allIgItems = igResults.flat();
+        const allWebItems = webResults.flat();
+
+        // Deduplicate Instagram results
         const seenUrls = new Set();
-        const uniqueItems = [];
-
-        for (const item of allItems) {
+        const uniqueIgItems = [];
+        for (const item of allIgItems) {
             if (!seenUrls.has(item.link)) {
                 seenUrls.add(item.link);
-
                 const metatags = item.pagemap?.metatags?.[0] || {};
                 const cseImage = item.pagemap?.cse_image?.[0]?.src || null;
-
-                uniqueItems.push({
+                uniqueIgItems.push({
                     title: item.title,
                     link: item.link,
                     snippet: item.snippet,
@@ -336,10 +412,29 @@ app.post('/api/omni-search', async (req, res) => {
             }
         }
 
-        console.log(`   ✅ ${allItems.length} raw → ${uniqueItems.length} unique candidates`);
+        // Deduplicate Web results (exclude Instagram URLs already captured)
+        const uniqueWebItems = [];
+        for (const item of allWebItems) {
+            if (!seenUrls.has(item.link)) {
+                seenUrls.add(item.link);
+                const metatags = item.pagemap?.metatags?.[0] || {};
+                uniqueWebItems.push({
+                    title: item.title,
+                    link: item.link,
+                    snippet: item.snippet,
+                    ogDescription: metatags['og:description'] || '',
+                    sourceQuery: item.searchQuery
+                });
+            }
+        }
+
+        const totalCandidates = uniqueIgItems.length + uniqueWebItems.length;
+        console.log(`   ✅ ${allIgItems.length} IG raw → ${uniqueIgItems.length} unique IG profiles`);
+        console.log(`   ✅ ${allWebItems.length} Web raw → ${uniqueWebItems.length} unique web pages`);
+        console.log(`   📊 Total unique candidates: ${totalCandidates}`);
         console.log(`   ⏱️ Search time: ${Date.now() - startTime}ms`);
 
-        if (uniqueItems.length === 0) {
+        if (totalCandidates === 0) {
             return res.json({
                 results: [],
                 meta: {
@@ -362,35 +457,64 @@ app.post('/api/omni-search', async (req, res) => {
             });
         }
 
-        // ─── PHASE 3: AI Classification ───
-        let validResults = await classifyResults(uniqueItems, query, expansion.location);
+        // ─── PHASE 3: AI Classification (two-stage) ───
+        console.log(`\n🎯 PHASE 3: AI Classification...`);
 
-        // Re-attach high-res logos
-        validResults = validResults.map(r => {
-            const original = uniqueItems.find(u =>
+        // Run both classification stages in parallel
+        const [igClassified, webExtracted] = await Promise.all([
+            classifyInstagramResults(uniqueIgItems, query, expansion.location),
+            extractFromWebResults(uniqueWebItems, query, expansion.location)
+        ]);
+
+        console.log(`   ✅ IG classified: ${igClassified.length} entities`);
+        console.log(`   ✅ Web extracted: ${webExtracted.length} entities`);
+
+        // Merge and deduplicate results from both sources
+        const mergedResults = [...igClassified];
+        const seenHandles = new Set(igClassified.map(r => r.handle?.toLowerCase()).filter(Boolean));
+
+        for (const webResult of webExtracted) {
+            const handle = webResult.handle?.toLowerCase();
+            if (handle && !seenHandles.has(handle)) {
+                seenHandles.add(handle);
+                mergedResults.push(webResult);
+            } else if (!handle && webResult.name) {
+                // Include named results without handles (they have the club name at least)
+                const nameKey = webResult.name.toLowerCase();
+                if (!mergedResults.some(r => r.name.toLowerCase() === nameKey)) {
+                    mergedResults.push(webResult);
+                }
+            }
+        }
+
+        // Re-attach high-res logos for IG results
+        const finalResults = mergedResults.map(r => {
+            const original = uniqueIgItems.find(u =>
                 u.link === r.url || u.link.includes(r.handle?.replace('@', ''))
             );
             return {
                 ...r,
                 logo: r.logo || original?.logoUrl || null,
-                sourceQuery: original?.sourceQuery || 'Unknown'
+                sourceQuery: r.sourceQuery || original?.sourceQuery || 'Discovery'
             };
         });
 
         const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-        console.log(`\n✨ COMPLETE: ${validResults.length} entities found in ${totalTime}s`);
+        console.log(`\n✨ COMPLETE: ${finalResults.length} total entities found in ${totalTime}s`);
 
         res.json({
             meta: {
                 query,
-                candidates_scanned: uniqueItems.length,
+                candidates_scanned: totalCandidates,
+                ig_candidates: uniqueIgItems.length,
+                web_candidates: uniqueWebItems.length,
                 queries_used: expansion.queries.length,
                 location: expansion.location,
                 intent: expansion.intent,
                 expanded_queries: expansion.queries,
                 time_seconds: parseFloat(totalTime)
             },
-            results: validResults,
+            results: finalResults,
             debug: errors.length > 0 ? { errors } : undefined
         });
 
@@ -402,6 +526,6 @@ app.post('/api/omni-search', async (req, res) => {
 
 // Start Server
 app.listen(PORT, () => {
-    console.log(`\n🚀 OMNI-SEARCH ENGINE v2.0 ACTIVE ON PORT ${PORT}`);
-    console.log(`   Powered by Gemini 2.0 Flash + AI Query Expansion`);
+    console.log(`\n🚀 OMNI-SEARCH ENGINE v3.0 ACTIVE ON PORT ${PORT}`);
+    console.log(`   Powered by Gemini 2.0 Flash | Max Coverage Mode`);
 });
