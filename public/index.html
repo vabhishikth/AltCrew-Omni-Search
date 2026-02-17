@@ -235,7 +235,27 @@
                 currentResults = data.results || [];
 
                 if (currentResults.length === 0) {
-                    document.getElementById('noResults').classList.remove('hidden');
+                    const noResultsEl = document.getElementById('noResults');
+                    let debugHtml = '<p>No valid entities found for this query.</p>';
+                    if (data.debug) {
+                        debugHtml += '<div class="mt-4 text-left max-w-lg mx-auto p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-mono">';
+                        debugHtml += '<p class="font-bold mb-2">⚠️ Debug Info:</p>';
+                        if (data.debug.message) debugHtml += `<p class="mb-2">${data.debug.message}</p>`;
+                        if (data.debug.errors) {
+                            debugHtml += '<ul class="list-disc pl-4">';
+                            data.debug.errors.forEach(e => debugHtml += `<li>${e}</li>`);
+                            debugHtml += '</ul>';
+                        }
+                        if (data.debug.env_check) {
+                            debugHtml += '<p class="mt-2 font-bold">Env Vars:</p>';
+                            Object.entries(data.debug.env_check).forEach(([k, v]) => {
+                                debugHtml += `<p>${v ? '✅' : '❌'} ${k}</p>`;
+                            });
+                        }
+                        debugHtml += '</div>';
+                    }
+                    noResultsEl.innerHTML = debugHtml;
+                    noResultsEl.classList.remove('hidden');
                     document.getElementById('paginationControls').classList.add('hidden');
                     return;
                 } else {

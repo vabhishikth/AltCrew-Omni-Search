@@ -18,8 +18,25 @@ const customSearch = google.customsearch('v1');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Model Strategy: Best Reasoning (Primary) -> Newest Flash (Fallback)
-const PRIMARY_MODEL = 'gemini-1.5-pro';
-const FALLBACK_MODEL = 'gemini-2.0-flash-exp';
+const PRIMARY_MODEL = 'gemini-2.0-flash';
+const FALLBACK_MODEL = 'gemini-1.5-flash';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🏥 HEALTH CHECK - Verify environment variables are set
+// ═══════════════════════════════════════════════════════════════════════════
+app.get('/api/health', (req, res) => {
+    const env = {
+        GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
+        GOOGLE_SEARCH_API_KEY: !!process.env.GOOGLE_SEARCH_API_KEY,
+        GOOGLE_SEARCH_CX: !!process.env.GOOGLE_SEARCH_CX,
+    };
+    const allSet = Object.values(env).every(v => v);
+    res.json({
+        status: allSet ? 'healthy' : 'misconfigured',
+        environment: env,
+        message: allSet ? 'All environment variables are set.' : 'MISSING environment variables! Set them in Render Dashboard > Settings > Environment Variables.'
+    });
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🔍 MASTER OMNI-SEARCH LAYERS
@@ -55,7 +72,10 @@ async function fetchLayer(query, layer) {
                 searchLayer: layer.name // Tag result with source layer
             }));
         } catch (e) {
-            console.error(`      ⚠️ Layer [${layer.name}] Page ${start} Limit/Error: ${e.message}`);
+            console.error(`      ⚠️ Layer [${layer.name}] Page ${start} Error: ${e.message}`);
+            if (e.message.includes('API key') || e.message.includes('403') || e.message.includes('invalid')) {
+                console.error(`      🔑 Possible cause: GOOGLE_SEARCH_API_KEY or GOOGLE_SEARCH_CX is missing/invalid`);
+            }
             return [];
         }
     });
@@ -96,9 +116,15 @@ app.post('/api/omni-search', async (req, res) => {
         console.log(`\n🔍 OMNI-SEARCH: "${query}"`);
         console.log('════════════════════════════════════════════════════');
 
+        // Track errors for diagnostics
+        const errors = [];
+
         // 1. EXECUTE PARALLEL SEARCH LAYERS
         const start = Date.now();
-        const layerPromises = SEARCH_LAYERS.map(layer => fetchLayer(query, layer));
+        const layerPromises = SEARCH_LAYERS.map(layer => fetchLayer(query, layer).catch(e => {
+            errors.push(`Search Layer [${layer.name}]: ${e.message}`);
+            return [];
+        }));
         const layerResults = await Promise.all(layerPromises);
 
         // Flatten and Deduplicate
@@ -128,7 +154,21 @@ app.post('/api/omni-search', async (req, res) => {
         console.log(`   ✅ Fetched ${allItems.length} raw results -> ${uniqueItems.length} unique candidates`);
         console.log(`   ⏱️  Time: ${Date.now() - start}ms`);
 
-        if (uniqueItems.length === 0) return res.json({ results: [] });
+        if (uniqueItems.length === 0) {
+            return res.json({
+                results: [],
+                meta: { query, candidates_scanned: 0, layers_used: SEARCH_LAYERS.length },
+                debug: {
+                    message: 'Google Custom Search returned 0 results. Check API key, Search Engine ID (CX), and quota.',
+                    errors: errors.length > 0 ? errors : ['All layers returned empty — likely an API key or quota issue.'],
+                    env_check: {
+                        GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
+                        GOOGLE_SEARCH_API_KEY: !!process.env.GOOGLE_SEARCH_API_KEY,
+                        GOOGLE_SEARCH_CX: !!process.env.GOOGLE_SEARCH_CX
+                    }
+                }
+            });
+        }
 
         // 2. AI ANALYSIS (BATCHED)
         const BATCH_SIZE = 50;
@@ -178,6 +218,7 @@ RESPONSE FORMAT (JSON Array ONLY):
                 return JSON.parse(clean);
             } catch (err) {
                 console.error(`      ❌ Batch ${index + 1} Failed:`, err.message);
+                errors.push(`AI Batch ${index + 1}: ${err.message}`);
                 return [];
             }
         });
@@ -203,7 +244,8 @@ RESPONSE FORMAT (JSON Array ONLY):
                 candidates_scanned: uniqueItems.length,
                 layers_used: SEARCH_LAYERS.length
             },
-            results: validResults
+            results: validResults,
+            debug: errors.length > 0 ? { errors } : undefined
         });
 
     } catch (error) {
