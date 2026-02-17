@@ -51,6 +51,31 @@
                 transform: scale(1.2);
             }
         }
+
+        .tag-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            border: 1px solid;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 
@@ -66,8 +91,8 @@
             </div>
             <div class="flex gap-4 text-xs font-mono text-zinc-500">
                 <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> ENGINE
-                    ONLINE</span>
-                <span class="hidden sm:inline">GEMINI 1.5 PRO CONNECTED</span>
+                    v2.0</span>
+                <span class="hidden sm:inline">AI QUERY EXPANSION</span>
             </div>
         </div>
     </nav>
@@ -78,12 +103,12 @@
         <!-- Search Hero -->
         <div class="text-center mb-16 relative w-full max-w-2xl">
             <h2 class="text-5xl sm:text-6xl font-bold mb-6 glow-text tracking-tight">Find Everything.</h2>
-            <p class="text-zinc-400 text-lg mb-10">Searching across 6 parallel layers: <br /><span
-                    class="text-zinc-600 text-sm font-mono mt-2 block">Standard • Community • Abstract • Sports • Event
-                    • Hybrid</span></p>
+            <p class="text-zinc-400 text-lg mb-10">AI-powered semantic search across Instagram<br /><span
+                    class="text-zinc-600 text-sm font-mono mt-2 block">Understands intent • Expands queries • Finds
+                    hidden gems</span></p>
 
             <form id="searchForm" class="relative group">
-                <input type="text" id="query" placeholder="e.g. 'Run Clubs in Bangalore' or 'Hyfit'"
+                <input type="text" id="query" placeholder="e.g. 'Wellness clubs in Bangalore' or 'Run crews in Mumbai'"
                     class="w-full bg-zinc-900/80 border border-white/10 rounded-2xl px-8 py-5 text-xl outline-none focus:border-white/30 focus:ring-1 focus:ring-white/20 transition-all shadow-2xl shadow-black/50 placeholder:text-zinc-700"
                     autocomplete="off">
                 <button type="submit"
@@ -103,8 +128,20 @@
                     <div class="loader" style="animation-delay: 0.2s"></div>
                     <div class="loader" style="animation-delay: 0.4s"></div>
                 </div>
-                <p id="loadingText" class="text-zinc-500 text-sm font-mono animate-pulse">Initializing 6-Layer Search...
-                </p>
+                <p id="loadingText" class="text-zinc-500 text-sm font-mono animate-pulse">Initializing...</p>
+            </div>
+        </div>
+
+        <!-- Query Expansion Info -->
+        <div id="expansionInfo" class="w-full max-w-2xl hidden mb-8 fade-in">
+            <div class="glass-panel rounded-xl p-4">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="text-sm font-semibold text-zinc-300">🧠 AI Query Expansion</span>
+                    <span id="expansionLocation"
+                        class="tag-pill bg-blue-500/10 text-blue-400 border-blue-500/20"></span>
+                </div>
+                <p id="expansionIntent" class="text-zinc-500 text-xs mb-3"></p>
+                <div id="expansionQueries" class="flex flex-wrap gap-1.5"></div>
             </div>
         </div>
 
@@ -113,7 +150,7 @@
             <div class="flex justify-between items-end mb-6 border-b border-white/5 pb-4">
                 <div>
                     <h3 class="text-2xl font-semibold">Discovered Entities</h3>
-                    <p class="text-zinc-500 text-sm mt-1" id="metaInfo">-- results found in --s</p>
+                    <p class="text-zinc-500 text-sm mt-1" id="metaInfo">-- results found</p>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="toggleSelectAll()" id="selectAllBtn"
@@ -166,30 +203,35 @@
     </main>
 
     <script>
-        const API_URL = '/api/omni-search'; // Relative path since on same server
+        const API_URL = '/api/omni-search';
         let currentResults = [];
         let selectedIndices = new Set();
         let currentPage = 1;
         const ITEMS_PER_PAGE = 20;
 
         const categoryColors = {
-            "Club": "bg-blue-500/10 text-blue-400 border-blue-500/20",
-            "Sports Facility": "bg-green-500/10 text-green-400 border-green-500/20",
+            "Run Club": "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+            "Fitness Club": "bg-blue-500/10 text-blue-400 border-blue-500/20",
+            "Sports Club": "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+            "Yoga/Wellness": "bg-violet-500/10 text-violet-400 border-violet-500/20",
             "Event": "bg-orange-500/10 text-orange-400 border-orange-500/20",
             "Hybrid Studio": "bg-purple-500/10 text-purple-400 border-purple-500/20",
-            "Community": "bg-pink-500/10 text-pink-400 border-pink-500/20"
+            "Community": "bg-pink-500/10 text-pink-400 border-pink-500/20",
+            "Coach/Trainer": "bg-amber-500/10 text-amber-400 border-amber-500/20",
+            "Brand": "bg-rose-500/10 text-rose-400 border-rose-500/20",
+            // Legacy fallbacks
+            "Club": "bg-blue-500/10 text-blue-400 border-blue-500/20",
+            "Sports Facility": "bg-green-500/10 text-green-400 border-green-500/20",
         };
 
         const loadingMessages = [
-            "Scanning Layer 1: Standard Search...",
-            "Scanning Layer 2: Community & Tribes...",
-            "Scanning Layer 3: Abstract 'Vibe' Search...",
-            "Scanning Layer 4: Sports Facilities...",
-            "Scanning Layer 5: Events & Expos...",
-            "Scanning Layer 6: Hybrid Studios...",
-            "Aggregating & Deduplicating Candidates...",
-            "Gemini 1.5 Pro: Classifying & Extracting Metadata...",
-            "Finalizing Professional Dashboard..."
+            "🧠 Understanding your query with AI...",
+            "🔍 Expanding into diverse search terms...",
+            "📡 Searching Instagram across multiple queries...",
+            "📡 Fetching results from parallel searches...",
+            "🤖 AI is classifying and filtering results...",
+            "🎯 Identifying clubs, events & communities...",
+            "✨ Finalizing results...",
         ];
 
         document.getElementById('searchForm').addEventListener('submit', async (e) => {
@@ -202,9 +244,11 @@
             const tableBody = document.getElementById('resultsTableBody');
             const loading = document.getElementById('loading');
             const loadingText = document.getElementById('loadingText');
+            const expansionInfo = document.getElementById('expansionInfo');
 
             resultsArea.classList.add('hidden', 'opacity-0');
             resultsArea.classList.remove('opacity-100');
+            expansionInfo.classList.add('hidden');
             loading.classList.remove('hidden');
             tableBody.innerHTML = '';
 
@@ -214,7 +258,7 @@
             const interval = setInterval(() => {
                 msgIdx = (msgIdx + 1) % loadingMessages.length;
                 loadingText.innerText = loadingMessages[msgIdx];
-            }, 800);
+            }, 2500);
 
             try {
                 const start = Date.now();
@@ -227,8 +271,19 @@
 
                 clearInterval(interval);
                 loading.classList.add('hidden');
+
+                // Show Query Expansion Info
+                if (data.meta && data.meta.expanded_queries) {
+                    document.getElementById('expansionLocation').innerText = `📍 ${data.meta.location || 'Unknown'}`;
+                    document.getElementById('expansionIntent').innerText = `Intent: ${data.meta.intent || query}`;
+                    const queriesContainer = document.getElementById('expansionQueries');
+                    queriesContainer.innerHTML = data.meta.expanded_queries.map(q =>
+                        `<span class="tag-pill bg-white/5 text-zinc-400 border-white/10">${q}</span>`
+                    ).join('');
+                    expansionInfo.classList.remove('hidden');
+                }
+
                 resultsArea.classList.remove('hidden');
-                // Trigger reflow
                 void resultsArea.offsetWidth;
                 resultsArea.classList.add('opacity-100');
 
@@ -263,8 +318,9 @@
                 }
 
                 // Update Meta
+                const elapsed = data.meta?.time_seconds || ((Date.now() - start) / 1000).toFixed(1);
                 document.getElementById('metaInfo').innerText =
-                    `${currentResults.length} entities found via ${data.meta.layers_used} search layers in ${((Date.now() - start) / 1000).toFixed(1)}s`;
+                    `${currentResults.length} entities found via ${data.meta?.queries_used || '?'} AI-generated queries in ${elapsed}s`;
 
                 // Render Table (Page 1)
                 currentPage = 1;
@@ -274,7 +330,7 @@
                 console.error(err);
                 clearInterval(interval);
                 loading.classList.add('hidden');
-                alert("Omni-Search Failed. Check console.");
+                alert("Omni-Search Failed: " + err.message);
             }
         });
 
@@ -302,6 +358,11 @@
 
                 const badgeClass = categoryColors[item.category] || "bg-zinc-800 text-zinc-400 border-zinc-700";
 
+                // Subcategory tag
+                const subTag = item.subcategory
+                    ? `<span class="tag-pill bg-white/5 text-zinc-500 border-white/10 ml-1">${item.subcategory}</span>`
+                    : '';
+
                 row.innerHTML = `
                     <td class="px-6 py-4">
                         <input type="checkbox" class="row-checkbox rounded border-zinc-700 bg-zinc-800 text-white focus:ring-0" 
@@ -316,6 +377,7 @@
                         <span class="px-2.5 py-1 rounded-full text-xs font-medium border ${badgeClass}">
                             ${item.category}
                         </span>
+                        ${subTag}
                     </td>
                     <td class="px-6 py-4 font-mono text-zinc-300">
                         ${item.followers || '<span class="text-zinc-700">--</span>'}
@@ -339,7 +401,6 @@
             document.getElementById('prevBtn').disabled = currentPage === 1;
             document.getElementById('nextBtn').disabled = currentPage === totalPages;
 
-            // Checkboxes
             updateSelectionUI();
         }
 
@@ -352,7 +413,6 @@
             }
         }
 
-        // Toggle Single Selection
         function toggleSelection(index) {
             if (selectedIndices.has(index)) {
                 selectedIndices.delete(index);
@@ -362,7 +422,6 @@
             updateSelectionUI();
         }
 
-        // Toggle Select All
         function toggleSelectAll() {
             const allSelected = selectedIndices.size === currentResults.length && currentResults.length > 0;
             if (allSelected) {
@@ -373,13 +432,10 @@
             updateSelectionUI();
         }
 
-        // Update UI state based on selection
         function updateSelectionUI() {
-            // Update Checkboxes
             document.querySelectorAll('.row-checkbox').forEach(cb => {
                 const idx = parseInt(cb.dataset.index);
                 cb.checked = selectedIndices.has(idx);
-                // Highlight row
                 const tr = cb.closest('tr');
                 if (selectedIndices.has(idx)) {
                     tr.classList.add('bg-white/10');
@@ -388,14 +444,12 @@
                 }
             });
 
-            // Update Header Checkbox
             const headerCb = document.getElementById('headerCheckbox');
             if (headerCb) {
                 headerCb.checked = selectedIndices.size === currentResults.length && currentResults.length > 0;
                 headerCb.indeterminate = selectedIndices.size > 0 && selectedIndices.size < currentResults.length;
             }
 
-            // Update Buttons
             const exportBtn = document.getElementById('exportBtn');
             const selectAllBtn = document.getElementById('selectAllBtn');
 
@@ -411,12 +465,11 @@
         function downloadCSV() {
             if (!currentResults.length) return;
 
-            // Filter if selection exists, otherwise export select all
             const itemsToExport = selectedIndices.size > 0
                 ? currentResults.filter((_, i) => selectedIndices.has(i))
                 : currentResults;
 
-            const headers = ["Name", "Handle", "Category", "Followers", "Reasoning", "URL"];
+            const headers = ["Name", "Handle", "Category", "Subcategory", "Followers", "Reasoning", "URL"];
             const csvRows = [headers.join(',')];
 
             itemsToExport.forEach(row => {
@@ -424,6 +477,7 @@
                     `"${row.name}"`,
                     row.handle,
                     row.category,
+                    row.subcategory || '',
                     row.followers,
                     `"${row.reasoning}"`,
                     row.url
